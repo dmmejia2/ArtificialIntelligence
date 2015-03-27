@@ -1,0 +1,181 @@
+--------------------------CREATE A NEW CLASS FOR THIS CALLED HillClimbSearch.java--------------------------------
+
+import java.util.*;
+
+public class HillClimbSearch {
+	Schedule solution;
+	
+	public HillClimbSearch(SchedulingProblem problem){
+		solution = doSearch(problem);
+	}
+	
+	public Schedule doSearch(SchedulingProblem p){
+		double neighborValue; //placeholders to hold schedule evaluations for comparison
+		double currentValue;
+		
+		Schedule current;
+		Schedule neighbor;
+		
+		int courseIndex = 0; //tells which course will be scheduled next
+		int coursesScheduled = 0; //tells how many courses have been successfully scheduled
+		current = p.getEmptySchedule(); //Initial state of the problem
+		while(true){
+			if(terminationConditionMet(p,coursesScheduled,courseIndex)){ 
+				//if we have exhausted all courses or rooms, then return the current solution
+				return current;
+			}
+			neighbor = makeNeighbor(p.courses.get(courseIndex), courseIndex, current, p);
+			if(neighbor == null){ //class cannot be scheduled at all due to capacity constraints
+				courseIndex++;
+				continue;
+			}
+			
+			currentValue = p.evaluateSchedule(current);
+			neighborValue = p.evaluateSchedule(neighbor);
+			if(neighborValue <= currentValue){
+				return current;
+			}
+			else{
+				current = neighbor;
+				coursesScheduled++;
+				courseIndex++;
+			}
+			
+		}
+	}
+	
+	public Schedule makeNeighbor(Course x, int courseNumber, Schedule scheduleToFill, SchedulingProblem p){
+		Schedule updatedSchedule = new Schedule(0,0); //create a new object to place schedule in
+		updatedSchedule.schedule = new int[scheduleToFill.schedule.length][10];  //copy of current schedule
+		
+		//create a list of rooms in preferred building for course x
+		ArrayList<Integer> preferred = makePreferredRoomList(x.preferredLocation, p.rooms.size(), p);
+		
+		//create a list of rooms in non-preferred buildings for course x
+		ArrayList<Integer> nonPreferred = makeNonPreferredList(preferred, p.rooms.size());
+		
+		//list the best(feasible) time slots for course x in order for largest bonus to smallest
+		ArrayList<Integer> goodTimeList = makeTimeList(x.timeSlotValues);
+		
+		//make deep copy of current schedule 
+		for(int k = 0; k < scheduleToFill.schedule.length; k++){
+			for(int n = 0; n < scheduleToFill.schedule[k].length; n++){
+				updatedSchedule.schedule[k][n] = scheduleToFill.schedule[k][n];
+			}
+		}
+		
+		//attempt to assign course to the most optimal location
+		for(int i = 0; i < preferred.size(); i++){
+			if(p.rooms.get(preferred.get(i)).capacity >= x.enrolledStudents){ //the room can fit students
+				for(int j = 0; j < goodTimeList.size(); j++){
+					if(updatedSchedule.schedule[preferred.get(i)][goodTimeList.get(j)] < 0){ //slot is available
+							updatedSchedule.schedule[preferred.get(i)][goodTimeList.get(j)] = courseNumber;
+							return updatedSchedule;
+						}
+					}
+			}
+		}
+		
+		//failure to schedule class at any preferred room, attempt to schedule at any other room
+		Random variation = new Random(); //randomly pick a non-preferred room
+		for(int a = 0; a < nonPreferred.size(); a++){
+			int r = variation.nextInt(nonPreferred.size()); //adds randomness to room selection
+			if(p.rooms.get(nonPreferred.get(r)).capacity >= x.enrolledStudents){ //the room can fit students
+				for(int b = 0; b < goodTimeList.size(); b++){
+					if(updatedSchedule.schedule[nonPreferred.get(r)][goodTimeList.get(b)] < 0){ //slot is available
+							updatedSchedule.schedule[nonPreferred.get(r)][goodTimeList.get(b)] = courseNumber;
+							return updatedSchedule;
+						}
+					}
+			}
+		}
+		
+		//class cannot be scheduled at all
+		return null;
+		
+	}
+	
+	public boolean terminationConditionMet(SchedulingProblem prob, int s, int boundCheck){
+		//helper method to determine if all courses or rooms have been exhausted in the problem
+		if(s >= prob.rooms.size()*10){
+			return true;
+		}
+		if(s >= prob.courses.size()){
+			return true;
+		}
+		if(boundCheck >= prob.courses.size()){
+			return true;
+		}
+		return false;
+	}
+	
+	public ArrayList<Integer> makePreferredRoomList(Building preferred, int noOfRooms, SchedulingProblem p){
+		//helper method for makeNeighbor
+		ArrayList<Integer> temp = new ArrayList<Integer>();
+		double rX; //coordinates of building that the room is in
+		double rY;
+		double cX = preferred.xCoord; //coordinates of preferred building by a course
+		double cY = preferred.yCoord;
+		for(int i = 0; i < noOfRooms; i++){
+			rX = p.rooms.get(i).b.xCoord;
+			rY = p.rooms.get(i).b.yCoord;
+			if((cX == rX) && (cY == rY)){
+				temp.add(i);
+			}
+		}
+		return temp;
+	}
+	
+	public ArrayList<Integer> makeNonPreferredList(ArrayList<Integer> preferredList, int noOfBuildings){
+		/*this method creates a list that is the inverse of the list of rooms that are preferred by a particular course.
+		  Its use is for the situation in which a course cannot be schedule in any of its preferred rooms, so it has to be scheduled
+		  in another room instead. */
+		ArrayList<Integer> temp = new ArrayList<Integer>();
+		for(int i = 0; i < noOfBuildings; i++){
+			if(!preferredList.contains(i)){
+				temp.add(i);
+			}
+		}
+		return temp;
+	}
+	
+	public ArrayList<Integer> makeTimeList(int[] timeValues){
+		//helper method for makeNeighbor
+		int[] tempArray = new int[timeValues.length];
+		ArrayList<Integer> temp = new ArrayList<Integer>();
+		for(int i = 0; i < timeValues.length; i++){ //create a deep copy of the time slot values array
+			tempArray[i] = timeValues[i];
+		}
+		
+		int highest = 0;
+		int highestVal = 0;
+		//find the highest value in the copied array and save the index of that value
+		//Insert the indexes into the list from highest value to lowest
+		for(int k = 0; k < tempArray.length; k++){
+			for(int j = 0; j < tempArray.length; j++){
+				if(tempArray[j] > highestVal){
+					highest = j; //index of highest value
+					highestVal = tempArray[j]; // actual highest value
+				}
+			}
+			temp.add(highest); //add highest index to list and reset everything
+			tempArray[highest] = 0;
+			highest = 0;
+			highestVal = 0;
+		}
+		return temp;
+	}
+}
+---------------------------------------------------------------------------------------
+
+
+----------ADD THIS SNIPPET TO searchAlgorithm.java ------------------------------
+  public Schedule hillClimb(SchedulingProblem problem, long deadline){ //I added this!
+	  HillClimbSearch solution = new HillClimbSearch(problem);
+	  return solution.solution;
+  }
+  --------------------------------------------------------------------------------------
+  ADD THIS SNIPPET TO Main.java between where it says "if(algorithm == 0)" and  "else"
+      else if(algorithm == 1){ //I added this!
+    	solution = search.hillClimb(test1, deadline);
+    }
